@@ -2,9 +2,10 @@ use clap::{Parser, Subcommand};
 use glob::Pattern;
 use std::error::Error;
 use std::fs::{self, File};
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, Write};
 use std::path::Path;
-use tiktoken_rs::{p50k_base};
+use tiktoken_rs::p50k_base;
+use walkdir::WalkDir;
 
 /// A command-line utility for processing files in a directory
 #[derive(Parser)]
@@ -121,14 +122,12 @@ fn tokenize_directory(
     // Initialize the tokenizer with the appropriate encoding
     let encoding = p50k_base()?;
 
-    // Iterate over each entry in the directory
-    for entry in fs::read_dir(path)? {
-        let entry = entry?;
+    // Use WalkDir to recursively go through the directory and subdirectories
+    for entry in WalkDir::new(path).into_iter().filter_map(|e| e.ok()) {
         let file_path = entry.path();
 
         if file_path.is_file() {
-            let file_name_os = entry.file_name();
-            let file_name_str = file_name_os.to_string_lossy();
+            let file_name_str = file_path.to_string_lossy();
 
             // Check if file matches any ignore pattern
             if ignore_globs.iter().any(|p| p.matches(&file_name_str)) {
@@ -137,7 +136,7 @@ fn tokenize_directory(
             }
 
             // Read file contents
-            let contents = fs::read_to_string(&file_path).unwrap_or_else(|_| {
+            let contents = fs::read_to_string(file_path).unwrap_or_else(|_| {
                 eprintln!("Warning: Could not read file {}", file_path.display());
                 String::from("[Could not read contents]")
             });
@@ -203,14 +202,12 @@ fn build_prompt_directory(
         None => Box::new(io::stdout()),
     };
 
-    // Iterate over each entry in the directory
-    for entry in fs::read_dir(path)? {
-        let entry = entry?;
+    // Use WalkDir to recursively go through the directory and subdirectories
+    for entry in WalkDir::new(path).into_iter().filter_map(|e| e.ok()) {
         let file_path = entry.path();
 
         if file_path.is_file() {
-            let file_name_os = entry.file_name();
-            let file_name_str = file_name_os.to_string_lossy();
+            let file_name_str = file_path.to_string_lossy();
 
             // Check if file matches any ignore pattern
             if ignore_globs.iter().any(|p| p.matches(&file_name_str)) {
@@ -219,7 +216,7 @@ fn build_prompt_directory(
             }
 
             // Read file contents
-            let contents = fs::read_to_string(&file_path).unwrap_or_else(|_| {
+            let contents = fs::read_to_string(file_path).unwrap_or_else(|_| {
                 eprintln!("Warning: Could not read file {}", file_path.display());
                 String::from("[Could not read contents]")
             });
@@ -237,8 +234,8 @@ fn build_prompt_directory(
                     .join("\n")
             };
 
-            // Write to output
-            writeln!(writer, "{}\n\n{}\n", file_name_str, processed_contents)?;
+            // Write to output with full path
+            writeln!(writer, "{}\n\n{}\n", file_path.display(), processed_contents)?;
         }
     }
 
